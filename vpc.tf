@@ -87,11 +87,10 @@ resource "aws_subnet" "subnet_privada_2" {
 
 # 3. Logging (CloudWatch y Flow Logs)
 resource "aws_cloudwatch_log_group" "vpc_log_group" {
-  name              = "/aws/vpc/flow-logs-v3"
+  name              = "/aws/vpc/flow-logs-v4" # <-- Cambia de v3 a v4
   retention_in_days = 365
   kms_key_id        = aws_kms_key.log_key.arn
 }
-
 resource "aws_flow_log" "mi_flow_log" {
   iam_role_arn    = data.aws_iam_role.lab_role.arn
   log_destination = aws_cloudwatch_log_group.vpc_log_group.arn
