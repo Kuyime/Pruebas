@@ -1,0 +1,134 @@
+name: "Terraform CI/CD con Seguridad"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  terraform:
+    name: "Terraform Security & Deploy"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.14.8"
+          terraform_wrapper: false
+
+      # --- INTEGRACIÓN DE TFLINT ---
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Init TFLint
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint -f compact
+      # -----------------------------
+
+      - name: Install Checkov
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install checkov
+
+      - name: Install OPA
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.61.0/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Terraform Show JSON
+        run: terraform show -json tfplan > tfplan.json
+
+      - name: Checkov Static Analysis
+        run: |
+          checkov -f tfplan.json --soft-fail
+
+      - name: OPA Policy Evaluation - Name Check
+        run: |
+          RESULT=$(opa eval -i tfplan.json -d terraform_name_check.rego "data.terraform.authz.allow.status" --format json)
+          echo "Resultado Name Check: $RESULT"
+          echo "$RESULT" | grep -q "true" || (echo "ERROR: La instancia no cumple con el nombre requerido." && exit 1)
+
+      - name: OPA Policy Evaluation - Region Check
+        run: |
+          RESULT=$(opa eval -i tfplan.json -d terraform_region_check.rego "data.terraform_region_check.allow" --format json)
+          echo "Resultado Region Check: $RESULT"
+          echo "$RESULT" | grep -q "true" || (echo "ERROR: Región de AWS no permitida." && exit 1)
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Upload Terraform State
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-state
+          path: terraform.tfstate
+
+  destroy:
+    name: "Terraform Destroy (Confirmación Manual)"
+    runs-on: ubuntu-latest
+    needs: terraform
+    environment: destroy-approval
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Download Terraform State
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-state
+          path: .
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
