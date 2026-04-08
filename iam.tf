@@ -4,8 +4,8 @@ resource "aws_iam_role" "flow_log_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "vpc-flow-logs.amazonaws.com" }
     }]
   })
@@ -24,9 +24,9 @@ resource "aws_iam_role_policy" "flow_log_policy" {
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams"
       ]
-      Effect   = "Allow"
+      Effect = "Allow"
       # Restringimos el acceso solo a nuestro grupo de logs específico
-      Resource = "${aws_cloudwatch_log_group.vpc_log_group.arn}:*" 
+      Resource = "${aws_cloudwatch_log_group.vpc_log_group.arn}:*"
     }]
   })
 }
@@ -36,10 +36,10 @@ resource "aws_iam_role" "role_ec2" {
   name = "EC2RoleForCheckov"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{ 
-      Action = "sts:AssumeRole", 
-      Effect = "Allow", 
-      Principal = { Service = "ec2.amazonaws.com" } 
+    Statement = [{
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
 }
