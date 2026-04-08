@@ -6,7 +6,7 @@ resource "aws_kms_key" "log_key" {
 }
 
 resource "aws_kms_alias" "log_key_alias" {
-  name          = "alias/cloudwatch-logs-key-v2" # <-- Actualizado para evitar el error AlreadyExistsException
+  name          = "alias/cloudwatch-logs-key-v3" # <-- Cambiado a v3
   target_key_id = aws_kms_key.log_key.key_id
 }
 
