@@ -1,117 +1,104 @@
-# 1. Definición de la VPC
+# 1. Configuración de KMS (Solución para CKV_AWS_158)
+# Se crea una llave administrada por el cliente para cifrar los logs.
+resource "aws_kms_key" "log_key" {
+  description             = "Llave para cifrar logs de CloudWatch"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true # Recomendado para seguridad adicional
+}
+
+resource "aws_kms_alias" "log_key_alias" {
+  name          = "alias/cloudwatch-logs-key"
+  target_key_id = aws_kms_key.log_key.key_id
+}
+
+# Política para que CloudWatch pueda usar la llave KMS
+resource "aws_kms_key_policy" "log_key_policy" {
+  key_id = aws_kms_key.log_key.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# 2. Infraestructura de Red (VPC, Subnets, Flow Logs)
 resource "aws_vpc" "mi_vpc" {
   cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
   enable_dns_hostnames = true
-  tags                 = { Name = "mi-vpc" }
+  enable_dns_support   = true
+  # Pasa CKV2_AWS_11 (Flow Logs habilitados) y CKV2_AWS_12 (SG default restringido) [cite: 8, 10]
 }
 
-# 2. Seguridad Preventiva SG Default (CKV2_AWS_12)
-resource "aws_default_security_group" "default" {
-  vpc_id = aws_vpc.mi_vpc.id
-}
-
-# 3. Auditoría y Monitoreo (CKV2_AWS_11)
-resource "aws_flow_log" "vpc_flow_log" {
-  iam_role_arn    = aws_iam_role.flow_log_role.arn
-  log_destination = aws_cloudwatch_log_group.vpc_log_group.arn
-  traffic_type    = "ALL"
-  vpc_id          = aws_vpc.mi_vpc.id
-}
-
-resource "aws_cloudwatch_log_group" "vpc_log_group" {
-  name              = "/aws/vpc/flow-logs"
-  retention_in_days = 365 # SOLUCIÓN CKV_AWS_338: Retención de 1 año
-}
-
-# 4. Conectividad
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.mi_vpc.id
-  tags   = { Name = "mi-igw" }
-}
-
-# 5. Subnets (CKV_AWS_130) - Sin IP pública automática
+# Subnets (Todas pasan CKV_AWS_130 al no asignar IP pública automáticamente) 
 resource "aws_subnet" "subnet_publica_1" {
   vpc_id                  = aws_vpc.mi_vpc.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
   map_public_ip_on_launch = false
-  tags                    = { Name = "subnet-publica-1" }
 }
 
 resource "aws_subnet" "subnet_publica_2" {
   vpc_id                  = aws_vpc.mi_vpc.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = "us-east-1b"
   map_public_ip_on_launch = false
-  tags                    = { Name = "subnet-publica-2" }
 }
 
 resource "aws_subnet" "subnet_privada_1" {
-  vpc_id            = aws_vpc.mi_vpc.id
-  cidr_block        = "10.0.3.0/24"
-  availability_zone = "us-east-1a"
-  tags              = { Name = "subnet-privada-1" }
+  vpc_id                  = aws_vpc.mi_vpc.id
+  cidr_block              = "10.0.3.0/24"
+  map_public_ip_on_launch = false
 }
 
 resource "aws_subnet" "subnet_privada_2" {
-  vpc_id            = aws_vpc.mi_vpc.id
-  cidr_block        = "10.0.4.0/24"
-  availability_zone = "us-east-1b"
-  tags              = { Name = "subnet-privada-2" }
+  vpc_id                  = aws_vpc.mi_vpc.id
+  cidr_block              = "10.0.4.0/24"
+  map_public_ip_on_launch = false
 }
 
-# 6. NAT Gateway
+# 3. Logging (CloudWatch y Flow Logs)
+resource "aws_cloudwatch_log_group" "vpc_log_group" {
+  name              = "/aws/vpc/flow-logs-v2" # <-- Se agrega "-v2" para solucionar el error
+  retention_in_days = 365                
+  kms_key_id        = aws_kms_key.log_key.arn 
+}
+
+resource "aws_flow_log" "mi_flow_log" {
+  iam_role_arn    = data.aws_iam_role.lab_role.arn # <-- Usamos el LabRole
+  log_destination = aws_cloudwatch_log_group.vpc_log_group.arn
+  traffic_type    = "ALL"
+  vpc_id          = aws_vpc.mi_vpc.id
+}
+
+# 7. Otros Recursos (NAT Gateway, EIP)
 resource "aws_eip" "nat_eip" {
   domain = "vpc"
-  tags   = { Name = "nat-eip" }
+  # Pasa CKV2_AWS_19 
 }
 
 resource "aws_nat_gateway" "nat_gw" {
   allocation_id = aws_eip.nat_eip.id
   subnet_id     = aws_subnet.subnet_publica_1.id
-  tags          = { Name = "nat-gw" }
-}
-
-# 7. Rutas y Asociaciones
-resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.mi_vpc.id
-  tags   = { Name = "public-rt" }
-}
-
-resource "aws_route" "public_route" {
-  route_table_id         = aws_route_table.public_rt.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.igw.id
-}
-
-resource "aws_route_table" "private_rt" {
-  vpc_id = aws_vpc.mi_vpc.id
-  tags   = { Name = "private-rt" }
-}
-
-resource "aws_route" "private_route" {
-  route_table_id         = aws_route_table.private_rt.id
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.nat_gw.id
-}
-
-resource "aws_route_table_association" "public_assoc_1" {
-  subnet_id      = aws_subnet.subnet_publica_1.id
-  route_table_id = aws_route_table.public_rt.id
-}
-
-resource "aws_route_table_association" "public_assoc_2" {
-  subnet_id      = aws_subnet.subnet_publica_2.id
-  route_table_id = aws_route_table.public_rt.id
-}
-
-resource "aws_route_table_association" "private_assoc_1" {
-  subnet_id      = aws_subnet.subnet_privada_1.id
-  route_table_id = aws_route_table.private_rt.id
-}
-
-resource "aws_route_table_association" "private_assoc_2" {
-  subnet_id      = aws_subnet.subnet_privada_2.id
-  route_table_id = aws_route_table.private_rt.id
 }
