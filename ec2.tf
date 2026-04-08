@@ -24,21 +24,21 @@ resource "aws_security_group" "ssh_access" {
 
 resource "aws_instance" "mi_ec2" {
   ami                    = "ami-0fa8aad99729521be"
-  instance_type          = "t3.micro" 
+  instance_type          = "t3.micro"
   subnet_id              = aws_subnet.subnet_publica_1.id
   vpc_security_group_ids = [aws_security_group.ssh_access.id]
-  
-  monitoring             = true # SOLUCIÓN CKV_AWS_126
-  ebs_optimized          = true # SOLUCIÓN CKV_AWS_135
-  
+
+  monitoring    = true # SOLUCIÓN CKV_AWS_126
+  ebs_optimized = true # SOLUCIÓN CKV_AWS_135
+
   # --- LA PIEZA QUE FALTA ---
-  iam_instance_profile   = aws_iam_instance_profile.profile_ec2.name # SOLUCIÓN CKV2_AWS_41
-  
-  metadata_options { 
+  iam_instance_profile = aws_iam_instance_profile.profile_ec2.name # SOLUCIÓN CKV2_AWS_41
+
+  metadata_options {
     http_tokens = "required" # SOLUCIÓN CKV_AWS_79
   }
 
-  root_block_device { 
+  root_block_device {
     encrypted = true # SOLUCIÓN CKV_AWS_8
   }
 

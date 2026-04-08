@@ -33,8 +33,8 @@ resource "aws_iam_role" "flow_log_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "vpc-flow-logs.amazonaws.com" }
     }]
   })
@@ -70,7 +70,7 @@ resource "aws_subnet" "subnet_publica_1" {
   vpc_id                  = aws_vpc.mi_vpc.id
   cidr_block              = "10.0.1.0/24"
   availability_zone       = "us-east-1a"
-  map_public_ip_on_launch = false 
+  map_public_ip_on_launch = false
   tags                    = { Name = "subnet-publica-1" }
 }
 
