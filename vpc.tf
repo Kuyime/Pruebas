@@ -6,7 +6,7 @@ resource "aws_kms_key" "log_key" {
 }
 
 resource "aws_kms_alias" "log_key_alias" {
-  name          = "alias/cloudwatch-logs-key"
+  name          = "alias/cloudwatch-logs-key-v2" # <-- Actualizado para evitar el error AlreadyExistsException
   target_key_id = aws_kms_key.log_key.key_id
 }
 
@@ -46,7 +46,12 @@ resource "aws_vpc" "mi_vpc" {
   enable_dns_support   = true
 }
 
-# Internet Gateway (NUEVO - Requerido para el NAT)
+# Securizamos el Security Group por defecto de la VPC (NUEVO - Solución a CKV2_AWS_12)
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.mi_vpc.id
+}
+
+# Internet Gateway (Requerido para el NAT)
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.mi_vpc.id
 
@@ -82,7 +87,7 @@ resource "aws_subnet" "subnet_privada_2" {
 
 # 3. Logging (CloudWatch y Flow Logs)
 resource "aws_cloudwatch_log_group" "vpc_log_group" {
-  name              = "/aws/vpc/flow-logs-v3" # Actualizado para evitar conflictos previos
+  name              = "/aws/vpc/flow-logs-v3"
   retention_in_days = 365
   kms_key_id        = aws_kms_key.log_key.arn
 }
@@ -103,6 +108,5 @@ resource "aws_nat_gateway" "nat_gw" {
   allocation_id = aws_eip.nat_eip.id
   subnet_id     = aws_subnet.subnet_publica_1.id
 
-  # Dependencia obligatoria para que no falle al crear
   depends_on = [aws_internet_gateway.igw]
 }

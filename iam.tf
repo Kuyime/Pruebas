@@ -5,6 +5,6 @@ data "aws_iam_role" "lab_role" {
 
 # Creamos el perfil de instancia referenciando directamente al LabRole
 resource "aws_iam_instance_profile" "profile_ec2" {
-  name = "ec2_profile"
+  name = "ec2_profile_v2" # <-- Actualizado para evitar el error EntityAlreadyExists
   role = data.aws_iam_role.lab_role.name
 }
