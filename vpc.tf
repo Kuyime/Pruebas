@@ -6,7 +6,7 @@ resource "aws_kms_key" "log_key" {
 }
 
 resource "aws_kms_alias" "log_key_alias" {
-  name          = "alias/cloudwatch-logs-key-v3" # <-- Cambiado a v3
+  name          = "alias/cloudwatch-logs-key-v4" # <-- Cambiado a v4
   target_key_id = aws_kms_key.log_key.key_id
 }
 
@@ -87,7 +87,7 @@ resource "aws_subnet" "subnet_privada_2" {
 
 # 3. Logging (CloudWatch y Flow Logs)
 resource "aws_cloudwatch_log_group" "vpc_log_group" {
-  name              = "/aws/vpc/flow-logs-v4" # <-- Cambia de v3 a v4
+  name              = "/aws/vpc/flow-logs-v5" # <-- Cambiado a v5
   retention_in_days = 365
   kms_key_id        = aws_kms_key.log_key.arn
 }
